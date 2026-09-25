@@ -39,6 +39,9 @@ button:focus-visible{outline:3px solid #ae7f36;outline-offset:3px}
 .status{min-height:22px;margin:10px 0;font-size:13px}
 .result img{display:block;width:100%;height:auto}
 .note{font-size:13px;margin-top:16px}
+@media(max-width:768px){
+ .mobile-save{display:inline-flex!important}
+}
 @media(max-width:480px){
  body{padding:20px 12px}h1{font-size:27px}.controls button{flex:1;padding:9px 7px;font-size:13px}
  .tab{flex:1;padding:10px 8px}.placeholder{font-size:11px}
@@ -53,11 +56,15 @@ button:focus-visible{outline:3px solid #ae7f36;outline-offset:3px}
 .free-stage.dragging canvas{cursor:grabbing}
 .free-help{font-size:13px;color:#776d5e;margin:8px 0 16px}
 .free-count{font-size:13px;margin:8px 0}
+@media(max-width:768px){
+ .mobile-save{display:inline-flex!important}
+}
 @media(max-width:480px){
  .free-toolbar button{padding:8px 9px;font-size:12px}
  .free-toolbar label{width:100%}
  .free-toolbar input[type=range]{flex:1}
 }
+.mobile-save{display:none;margin:12px 0;padding:11px 16px}
 </style>
 </head>
 <body>
@@ -123,7 +130,8 @@ button:focus-visible{outline:3px solid #ae7f36;outline-offset:3px}
 
  <section class="result" id="free-result" hidden>
   <h2>Готовый PNG</h2>
-  <p>Правый клик по картинке → «Сохранить картинку как…». На телефоне — удерживайте палец.</p>
+  <p>На компьютере: правый клик → «Сохранить картинку как…». На телефоне нажмите кнопку ниже.</p>
+  <button class="mobile-save" id="free-save" type="button">Сохранить PNG на устройство</button>
   <img id="free-png" alt="Готовый свободный коллаж">
   <p class="note" id="free-output-size">Размер PNG: 2000 × 2800 пикселей.</p>
  </section>
@@ -142,7 +150,43 @@ const configs = {
  nine:{count:9,cols:3,W:600,H:900,out:'1800 × 2700'},
  eight:{count:8,cols:2,W:1000,H:700,out:'2000 × 2800'}
 };
+
 const editors = {};
+
+async function savePngToDevice(dataUrl,filename='collage.png'){
+ if(!dataUrl)return;
+ try{
+  const res=await fetch(dataUrl);
+  const blob=await res.blob();
+  const file=new File([blob],filename,{type:'image/png'});
+
+  // On supported phones this opens the native share/save sheet
+  // (including "Save Image" / "Save to Files" where the OS provides it).
+  if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+   await navigator.share({files:[file],title:'Коллаж'});
+   return;
+  }
+
+  // Fallback for browsers without file sharing.
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+ }catch(err){
+  // If the user cancelled the native share sheet, do nothing.
+  if(err && err.name==='AbortError')return;
+  const a=document.createElement('a');
+  a.href=dataUrl;
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+ }
+}
 
 function editorMarkup(cfg){
  return `
@@ -159,7 +203,8 @@ function editorMarkup(cfg){
  <div class="status">Загружено: 0 из ${cfg.count}</div>
  <section class="result" hidden>
   <h2>Готовый PNG</h2>
-  <p>Правый клик по картинке → «Сохранить картинку как…». На телефоне — удерживайте палец.</p>
+  <p>На компьютере: правый клик → «Сохранить картинку как…». На телефоне нажмите кнопку ниже.</p>
+  <button class="mobile-save" type="button">Сохранить PNG на устройство</button>
   <img class="png" alt="Готовый коллаж">
   <p class="note">Размер PNG: ${cfg.out} пикселей.</p>
  </section>`;
@@ -172,6 +217,7 @@ function makeEditor(root,key){
  let selected=-1,busy=false,drag=null;
 
  const q=s=>$(s,root);
+ q('.mobile-save').addEventListener('click',()=>savePngToDevice(q('.png').src,`collage-${key}.png`));
  function refresh(msg=''){
   const count=slots.filter(Boolean).length;
   q('.status').textContent=msg||`Загружено: ${count} из ${cfg.count}`;
@@ -287,6 +333,7 @@ function makeFreeEditor(){
  const rotateRight=document.getElementById('free-rotate-right');
  const countEl=document.getElementById('free-count');
  const png=document.getElementById('free-png');
+ const save=document.getElementById('free-save');
  const result=document.getElementById('free-result');
  const upload=document.getElementById('free-upload');
  const del=document.getElementById('free-delete');
@@ -436,6 +483,7 @@ function makeFreeEditor(){
  }
 
  sizeChoice.onchange=()=>setCanvasSize(sizeChoice.value);
+ save.onclick=()=>savePngToDevice(png.src,`collage-${canvas.width}x${canvas.height}.png`);
  upload.onclick=()=>files.click();
  files.onchange=async e=>{await addFiles(e.target.files);e.target.value=''};
  scale.oninput=()=>{
