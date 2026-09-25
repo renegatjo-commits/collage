@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор коллажей</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:28px 16px;background:#f3eee5;color:#433c32;font:16px/1.5 system-ui,sans-serif}
+main{max-width:760px;margin:auto}
+h1{font:normal 32px Georgia,serif;margin:0 0 8px}
+h2{font:normal 26px Georgia,serif;margin-top:30px}
+p{margin:0 0 18px;color:#70685c}
+.tabs{display:flex;gap:8px;margin:22px 0 18px;border-bottom:1px solid #cfc4b2}
+.tab{border:0;border-radius:8px 8px 0 0;padding:11px 18px;background:#e6ded1;color:#665d50}
+.tab.active{background:#514d3f;color:#fff}
+.panel[hidden],[hidden]{display:none!important}
+.controls,
+button,select{font:inherit;border:1px solid #b8ad9a;border-radius:8px;padding:10px 14px;background:#fffaf2;color:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible{outline:3px solid #ae7f36;outline-offset:3px}
+.stage{position:relative}
+.grid{display:grid;gap:0;width:100%;background:#ddd4c5;overflow:hidden}
+.grid-nine{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid-eight{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cell{position:relative;display:block;width:100%;padding:0;border:0;border-radius:0;background:#e6ded1;overflow:hidden;color:#776d5e}
+.grid-nine .cell{aspect-ratio:2/3}
+.grid-eight .cell{aspect-ratio:10/7}
+.cell:nth-child(even){background:#dcd2c2}
+.cell canvas{display:block;width:100%;height:100%}
+.placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;font-size:13px}
+.placeholder b{font-size:28px;font-weight:normal}
+.cell.filled{cursor:grab;touch-action:none;user-select:none}
+.cell.filled:active{cursor:grabbing}
+.cell.selected{outline:3px solid #a68045;outline-offset:-3px;z-index:2}
+.cell.filled:hover:after{content:'Двигайте фото';position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:#433c32d9;color:#fff;padding:4px 10px;border-radius:5px;font-size:12px;white-space:nowrap}
+
+.status{min-height:22px;margin:10px 0;font-size:13px}
+.result img{display:block;width:100%;height:auto}
+.note{font-size:13px;margin-top:16px}
+@media(max-width:480px){
+ body{padding:20px 12px}h1{font-size:27px}.controls button{flex:1;padding:9px 7px;font-size:13px}
+ .tab{flex:1;padding:10px 8px}.placeholder{font-size:11px}
+}
+
+.free-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 12px}
+.free-toolbar label{display:flex;align-items:center;gap:8px}
+.free-toolbar input[type=range]{width:170px}
+.free-stage{position:relative;width:100%;aspect-ratio:5/7;background-color:#fff;background-image:linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;border:1px solid #cfc4b2;overflow:hidden;touch-action:none;user-select:none}
+.free-stage canvas{display:block;width:100%;height:100%;cursor:default}
+.free-stage.landscape{aspect-ratio:7/5}.free-stage.has-selection canvas{cursor:grab}
+.free-stage.dragging canvas{cursor:grabbing}
+.free-help{font-size:13px;color:#776d5e;margin:8px 0 16px}
+.free-count{font-size:13px;margin:8px 0}
+@media(max-width:480px){
+ .free-toolbar button{padding:8px 9px;font-size:12px}
+ .free-toolbar label{width:100%}
+ .free-toolbar input[type=range]{flex:1}
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Конструктор коллажей</h1>
+<p>Загружайте фотографии и двигайте их мышкой или пальцем внутри окон. Готовый коллаж появляется как обычная PNG-картинка — её можно сохранить через правую кнопку мыши.</p>
+
+<div class="tabs" role="tablist">
+ <button class="tab active" data-tab="nine" role="tab" aria-selected="true">9 фото · 3×3</button>
+ <button class="tab" data-tab="eight" role="tab" aria-selected="false">8 фото · 2×4</button>
+ <button class="tab" data-tab="free" role="tab" aria-selected="false">Свободный коллаж</button>
+</div>
+
+<section class="panel" id="panel-nine">
+ <p><b>Вкладка 1:</b> девять вертикальных окон 3×3.</p>
+ <div class="editor" data-editor="nine"></div>
+</section>
+
+<section class="panel" id="panel-eight" hidden>
+ <p><b>Вкладка 2:</b> восемь широких окон 2×4 — как на присланном примере.</p>
+ <div class="editor" data-editor="eight"></div>
+</section>
+
+
+<section class="panel" id="panel-free" hidden>
+ <p><b>Свободный коллаж:</b> прозрачное поле двух размеров: вертикальное 2000 × 2800 px или горизонтальное 2800 × 2000 px. Можно загрузить до 30 JPEG/PNG, свободно двигать их, менять масштаб, поворот и порядок слоёв.</p>
+
+ <div class="free-toolbar">
+  <label>Размер:
+   <select id="free-size">
+    <option value="portrait">Вертикальный · 2000 × 2800</option>
+    <option value="landscape">Горизонтальный · 2800 × 2000</option>
+   </select>
+  </label>
+  <button id="free-upload" type="button">Добавить картинки</button>
+  <input id="free-files" type="file" accept="image/jpeg,image/png" multiple hidden>
+  <button id="free-delete" type="button" disabled>Удалить выбранную</button>
+  <button id="free-clear" type="button" disabled>Очистить всё</button>
+ </div>
+
+ <div class="free-toolbar">
+  <label>Масштаб
+   <input id="free-scale" type="range" min="5" max="400" value="100" step="1" disabled>
+   <span id="free-scale-value">100%</span>
+  </label>
+  <label>Поворот
+   <input id="free-rotate" type="range" min="-180" max="180" value="0" step="1" disabled>
+   <span id="free-rotate-value">0°</span>
+  </label>
+  <button id="free-rotate-left" type="button" disabled>↶ 15°</button>
+  <button id="free-rotate-right" type="button" disabled>↷ 15°</button>
+  <button id="free-back" type="button" disabled>На слой назад</button>
+  <button id="free-front" type="button" disabled>На слой вперёд</button>
+  <button id="free-bottom" type="button" disabled>На самый задний</button>
+  <button id="free-top" type="button" disabled>На самый передний</button>
+ </div>
+
+ <div class="free-count" id="free-count">Загружено: 0 из 30</div>
+ <div class="free-stage" id="free-stage">
+  <canvas id="free-canvas" width="2000" height="2800"></canvas>
+ </div>
+ <p class="free-help">Кликните по картинке, чтобы выбрать её. Перетаскивайте мышкой или пальцем. Масштаб и поворот меняются ползунками. Выбранная картинка в редакторе отмечена пунктиром — в итоговый PNG пунктир не попадает. Пустые участки сохраняются прозрачными.</p>
+
+ <section class="result" id="free-result" hidden>
+  <h2>Готовый PNG</h2>
+  <p>Правый клик по картинке → «Сохранить картинку как…». На телефоне — удерживайте палец.</p>
+  <img id="free-png" alt="Готовый свободный коллаж">
+  <p class="note" id="free-output-size">Размер PNG: 2000 × 2800 пикселей.</p>
+ </section>
+</section>
+
+<p class="note">Фотографии обрабатываются только в браузере. Вкладки хранят свои изображения отдельно.</p>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = (s,root=document)=>root.querySelector(s);
+const $$ = (s,root=document)=>[...root.querySelectorAll(s)];
+
+const configs = {
+ nine:{count:9,cols:3,W:600,H:900,out:'1800 × 2700'},
+ eight:{count:8,cols:2,W:1000,H:700,out:'2000 × 2800'}
+};
+const editors = {};
+
+function editorMarkup(cfg){
+ return `
+ <div class="controls">
+  <button class="upload" type="button">Загрузить картинки</button>
+  <button class="replace" type="button" disabled>Заменить выбранное фото</button>
+  <button class="clear" type="button" disabled>Очистить</button>
+ </div>
+ <input class="multiple" type="file" accept="image/*" multiple hidden>
+ <input class="single" type="file" accept="image/*" hidden>
+ <div class="stage">
+  <div class="grid grid-${cfg.count===9?'nine':'eight'}"></div>
+ </div>
+ <div class="status">Загружено: 0 из ${cfg.count}</div>
+ <section class="result" hidden>
+  <h2>Готовый PNG</h2>
+  <p>Правый клик по картинке → «Сохранить картинку как…». На телефоне — удерживайте палец.</p>
+  <img class="png" alt="Готовый коллаж">
+  <p class="note">Размер PNG: ${cfg.out} пикселей.</p>
+ </section>`;
+}
+
+function makeEditor(root,key){
+ const cfg=configs[key];
+ root.innerHTML=editorMarkup(cfg);
+ const slots=Array(cfg.count).fill(null), buttons=[];
+ let selected=-1,busy=false,drag=null;
+
+ const q=s=>$(s,root);
+ function refresh(msg=''){
+  const count=slots.filter(Boolean).length;
+  q('.status').textContent=msg||`Загружено: ${count} из ${cfg.count}`;
+  q('.upload').disabled=busy;
+  q('.clear').disabled=busy||count===0;
+  q('.replace').disabled=busy||selected<0||!slots[selected];
+  buttons.forEach(b=>b.disabled=busy);
+ }
+ function select(i){
+  selected=i;buttons.forEach((b,j)=>b.classList.toggle('selected',j===i));refresh();
+ }
+ function invalidate(){q('.result').hidden=true;q('.png').removeAttribute('src')}
+ function draw(i){
+  const s=slots[i],ctx=s.canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,cfg.W,cfg.H);
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(s.img,s.x,s.y,s.sw,s.sh,0,0,cfg.W,cfg.H);
+ }
+ function move(i,x,y){
+  const s=slots[i];
+  s.x=Math.max(0,Math.min(s.img.naturalWidth-s.sw,x));
+  s.y=Math.max(0,Math.min(s.img.naturalHeight-s.sh,y));
+  draw(i);
+ }
+ function compose(){
+  if(slots.some(s=>!s)){invalidate();return}
+  try{
+   const c=document.createElement('canvas');
+   const rows=Math.ceil(cfg.count/cfg.cols);
+   c.width=cfg.W*cfg.cols;c.height=cfg.H*rows;
+   const ctx=c.getContext('2d');
+   slots.forEach((s,i)=>ctx.drawImage(s.canvas,(i%cfg.cols)*cfg.W,Math.floor(i/cfg.cols)*cfg.H));
+   q('.png').src=c.toDataURL('image/png');
+   q('.result').hidden=false;
+  }catch(e){invalidate();refresh('Не удалось собрать PNG. Попробуйте заменить слишком большие изображения.')}
+ }
+ async function load(file,i){
+  const url=URL.createObjectURL(file);
+  try{
+   const img=new Image();
+   await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;img.src=url});
+   const scale=Math.max(cfg.W/img.naturalWidth,cfg.H/img.naturalHeight);
+   const sw=cfg.W/scale,sh=cfg.H/scale;
+   const canvas=document.createElement('canvas');canvas.width=cfg.W;canvas.height=cfg.H;
+   slots[i]={img,canvas,scale,sw,sh,x:(img.naturalWidth-sw)/2,y:(img.naturalHeight-sh)/2};
+   draw(i);buttons[i].replaceChildren(canvas);buttons[i].classList.add('filled');
+  }finally{URL.revokeObjectURL(url)}
+ }
+ async function process(files,indexes,extra=''){
+  busy=true;invalidate();refresh('Загружаем изображения…');let errors=0;
+  try{for(let i=0;i<files.length;i++){try{await load(files[i],indexes[i])}catch(e){errors++}}}
+  finally{
+   busy=false;refresh(`Загружено: ${slots.filter(Boolean).length} из ${cfg.count}.${errors?' Ошибок: '+errors+'.':''}${extra}`);compose();
+  }
+ }
+
+ for(let i=0;i<cfg.count;i++){
+  const b=document.createElement('button');b.type='button';b.className='cell';
+  b.innerHTML=`<span class="placeholder"><b>＋</b>Фото ${i+1}</span>`;
+  b.addEventListener('click',()=>{select(i);if(!slots[i])q('.single').click()});
+  b.addEventListener('pointerdown',e=>{
+   if(busy||!slots[i]||e.button!==0)return;select(i);
+   const s=slots[i],r=b.getBoundingClientRect();
+   drag={i,id:e.pointerId,px:e.clientX,py:e.clientY,x:s.x,y:s.y,rx:s.sw/r.width,ry:s.sh/r.height,moved:false};
+   b.setPointerCapture(e.pointerId);
+  });
+  b.addEventListener('pointermove',e=>{
+   if(!drag||drag.i!==i||drag.id!==e.pointerId)return;
+   const dx=e.clientX-drag.px,dy=e.clientY-drag.py;
+   if(!drag.moved&&Math.abs(dx)+Math.abs(dy)<3)return;
+   if(!drag.moved)invalidate();drag.moved=true;move(i,drag.x-dx*drag.rx,drag.y-dy*drag.ry);
+  });
+  const finish=e=>{
+   if(!drag||drag.i!==i||drag.id!==e.pointerId)return;
+   const moved=drag.moved;drag=null;
+   if(b.hasPointerCapture(e.pointerId))b.releasePointerCapture(e.pointerId);
+   if(moved)compose();
+  };
+  b.addEventListener('pointerup',finish);b.addEventListener('pointercancel',finish);b.addEventListener('lostpointercapture',finish);
+  q('.grid').append(b);buttons.push(b);
+ }
+
+ q('.upload').onclick=()=>q('.multiple').click();
+ q('.replace').onclick=()=>q('.single').click();
+ q('.multiple').onchange=async e=>{
+  const files=[...e.target.files];e.target.value='';if(!files.length)return;
+  const empty=slots.map((s,i)=>s?-1:i).filter(i=>i>=0);
+  const indexes=files.length>=cfg.count||!empty.length?Array.from({length:cfg.count},(_,i)=>i):empty;
+  const chosen=files.slice(0,indexes.length);
+  await process(chosen,indexes,files.length>chosen.length?` Лишние файлы пропущены: ${files.length-chosen.length}.`:'');
+ };
+ q('.single').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(f&&selected>=0)await process([f],[selected])};
+ q('.clear').onclick=()=>{
+  slots.fill(null);selected=-1;invalidate();
+  buttons.forEach((b,i)=>{b.classList.remove('filled','selected');b.innerHTML=`<span class="placeholder"><b>＋</b>Фото ${i+1}</span>`});refresh();
+ };
+ return {compose};
+}
+
+$$('.editor').forEach(el=>editors[el.dataset.editor]=makeEditor(el,el.dataset.editor));
+
+function makeFreeEditor(){
+ const canvas=document.getElementById('free-canvas');
+ const sizeChoice=document.getElementById('free-size');
+ const ctx=canvas.getContext('2d');
+ const stage=document.getElementById('free-stage');
+ const files=document.getElementById('free-files');
+ const scale=document.getElementById('free-scale');
+ const scaleValue=document.getElementById('free-scale-value');
+ const rotate=document.getElementById('free-rotate');
+ const rotateValue=document.getElementById('free-rotate-value');
+ const rotateLeft=document.getElementById('free-rotate-left');
+ const rotateRight=document.getElementById('free-rotate-right');
+ const countEl=document.getElementById('free-count');
+ const png=document.getElementById('free-png');
+ const result=document.getElementById('free-result');
+ const upload=document.getElementById('free-upload');
+ const del=document.getElementById('free-delete');
+ const clear=document.getElementById('free-clear');
+ const back=document.getElementById('free-back');
+ const front=document.getElementById('free-front');
+ const bottom=document.getElementById('free-bottom');
+ const top=document.getElementById('free-top');
+
+ const items=[];
+ let selected=null;
+ let drag=null;
+ let raf=0;
+ const MAX=30;
+
+ function selectedIndex(){return selected?items.indexOf(selected):-1}
+ function setCanvasSize(mode){
+  const oldW=canvas.width,oldH=canvas.height;
+  const newW=mode==='landscape'?2800:2000;
+  const newH=mode==='landscape'?2000:2800;
+  if(oldW===newW&&oldH===newH)return;
+
+  // Keep the relative positions and apparent sizes of existing layers.
+  const sx=newW/oldW,sy=newH/oldH;
+  const uniform=Math.min(sx,sy);
+  for(const it of items){
+   it.x*=sx;
+   it.y*=sy;
+   it.baseW*=uniform;
+   it.baseH*=uniform;
+  }
+
+  canvas.width=newW;
+  canvas.height=newH;
+  stage.classList.toggle('landscape',mode==='landscape');
+  document.getElementById('free-output-size').textContent=`Размер PNG: ${newW} × ${newH} пикселей.`;
+  draw(true);
+  if(items.length)makePng();
+  else result.hidden=true;
+ }
+ function updateControls(){
+  const i=selectedIndex(), has=i>=0;
+  countEl.textContent=`Загружено: ${items.length} из ${MAX}`;
+  upload.disabled=items.length>=MAX;
+  del.disabled=!has;
+  clear.disabled=items.length===0;
+  scale.disabled=!has;
+  rotate.disabled=!has;
+  rotateLeft.disabled=!has;
+  rotateRight.disabled=!has;
+  back.disabled=!has||i===0;
+  bottom.disabled=!has||i===0;
+  front.disabled=!has||i===items.length-1;
+  top.disabled=!has||i===items.length-1;
+  stage.classList.toggle('has-selection',has);
+  if(has){
+   scale.value=Math.round(selected.scale*100);
+   scaleValue.textContent=Math.round(selected.scale*100)+'%';
+   rotate.value=Math.round(selected.rotation*180/Math.PI);
+   rotateValue.textContent=Math.round(selected.rotation*180/Math.PI)+'°';
+  }else{
+   scale.value=100;scaleValue.textContent='100%';
+   rotate.value=0;rotateValue.textContent='0°';
+  }
+ }
+ function draw(showSelection=true){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(const it of items){
+   const w=it.baseW*it.scale,h=it.baseH*it.scale;
+   ctx.save();
+   ctx.translate(it.x,it.y);
+   ctx.rotate(it.rotation);
+   ctx.drawImage(it.img,-w/2,-h/2,w,h);
+   ctx.restore();
+  }
+  if(showSelection&&selected){
+   const w=selected.baseW*selected.scale,h=selected.baseH*selected.scale;
+   ctx.save();
+   ctx.translate(selected.x,selected.y);
+   ctx.rotate(selected.rotation);
+   ctx.strokeStyle='#111';
+   ctx.lineWidth=Math.max(3,canvas.width/500);
+   ctx.setLineDash([18,12]);
+   ctx.strokeRect(-w/2,-h/2,w,h);
+   ctx.restore();
+  }
+ }
+ function makePng(){
+  draw(false);
+  try{
+   png.src=canvas.toDataURL('image/png');
+   result.hidden=items.length===0;
+  }catch(e){result.hidden=true}
+  draw(true);
+ }
+ function schedulePng(){
+  clearTimeout(schedulePng.t);
+  schedulePng.t=setTimeout(makePng,80);
+ }
+ function point(e){
+  const r=canvas.getBoundingClientRect();
+  return {x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};
+ }
+ function hit(x,y){
+  for(let i=items.length-1;i>=0;i--){
+   const it=items[i],w=it.baseW*it.scale,h=it.baseH*it.scale;
+   const dx=x-it.x,dy=y-it.y,c=Math.cos(-it.rotation),s=Math.sin(-it.rotation);
+   const lx=dx*c-dy*s,ly=dx*s+dy*c;
+   if(lx>=-w/2&&lx<=w/2&&ly>=-h/2&&ly<=h/2)return it;
+  }
+  return null;
+ }
+ function select(it){
+  selected=it;updateControls();draw(true);
+ }
+ function normalizeImage(img){
+  // New images initially fit comfortably inside the 2000x2800 field.
+  const maxW=canvas.width*.72,maxH=canvas.height*.55;
+  const fit=Math.min(1,maxW/img.naturalWidth,maxH/img.naturalHeight);
+  return {baseW:img.naturalWidth*fit,baseH:img.naturalHeight*fit};
+ }
+ async function addFiles(list){
+  const available=MAX-items.length;
+  const chosen=[...list].filter(f=>f.type==='image/jpeg'||f.type==='image/png').slice(0,available);
+  for(const file of chosen){
+   const url=URL.createObjectURL(file);
+   try{
+    const img=new Image();
+    await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;img.src=url});
+    const b=normalizeImage(img);
+    const n=items.length;
+    const offset=(n%8)*28;
+    const it={img,baseW:b.baseW,baseH:b.baseH,scale:1,rotation:0,x:canvas.width/2+offset,y:canvas.height/2+offset};
+    items.push(it);selected=it;
+   }catch(e){}
+   finally{URL.revokeObjectURL(url)}
+  }
+  updateControls();draw(true);makePng();
+ }
+ function reorder(mode){
+  const i=selectedIndex();if(i<0)return;
+  if(mode==='back'&&i>0){[items[i-1],items[i]]=[items[i],items[i-1]]}
+  if(mode==='front'&&i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]]}
+  if(mode==='bottom'&&i>0){items.splice(i,1);items.unshift(selected)}
+  if(mode==='top'&&i<items.length-1){items.splice(i,1);items.push(selected)}
+  updateControls();draw(true);schedulePng();
+ }
+
+ sizeChoice.onchange=()=>setCanvasSize(sizeChoice.value);
+ upload.onclick=()=>files.click();
+ files.onchange=async e=>{await addFiles(e.target.files);e.target.value=''};
+ scale.oninput=()=>{
+  if(!selected)return;
+  selected.scale=Number(scale.value)/100;
+  scaleValue.textContent=scale.value+'%';
+  draw(true);schedulePng();
+ };
+ rotate.oninput=()=>{
+  if(!selected)return;
+  selected.rotation=Number(rotate.value)*Math.PI/180;
+  rotateValue.textContent=rotate.value+'°';
+  draw(true);schedulePng();
+ };
+ function rotateBy(deg){
+  if(!selected)return;
+  let d=Math.round(selected.rotation*180/Math.PI)+deg;
+  while(d>180)d-=360;
+  while(d<-180)d+=360;
+  selected.rotation=d*Math.PI/180;
+  rotate.value=d;rotateValue.textContent=d+'°';
+  draw(true);schedulePng();
+ }
+ rotateLeft.onclick=()=>rotateBy(-15);
+ rotateRight.onclick=()=>rotateBy(15);
+ del.onclick=()=>{
+  const i=selectedIndex();if(i<0)return;
+  items.splice(i,1);selected=items[Math.min(i,items.length-1)]||null;
+  updateControls();draw(true);makePng();
+ };
+ clear.onclick=()=>{
+  items.length=0;selected=null;updateControls();draw(true);result.hidden=true;png.removeAttribute('src');
+ };
+ back.onclick=()=>reorder('back');
+ front.onclick=()=>reorder('front');
+ bottom.onclick=()=>reorder('bottom');
+ top.onclick=()=>reorder('top');
+
+ canvas.addEventListener('pointerdown',e=>{
+  if(e.button!==0)return;
+  const p=point(e),it=hit(p.x,p.y);
+  select(it);
+  if(!it)return;
+  drag={id:e.pointerId,it,dx:p.x-it.x,dy:p.y-it.y};
+  stage.classList.add('dragging');
+  canvas.setPointerCapture(e.pointerId);
+ });
+ canvas.addEventListener('pointermove',e=>{
+  if(!drag||drag.id!==e.pointerId)return;
+  const p=point(e);
+  drag.it.x=p.x-drag.dx;drag.it.y=p.y-drag.dy;
+  draw(true);schedulePng();
+ });
+ function endDrag(e){
+  if(!drag||drag.id!==e.pointerId)return;
+  drag=null;stage.classList.remove('dragging');
+  if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
+  makePng();
+ }
+ canvas.addEventListener('pointerup',endDrag);
+ canvas.addEventListener('pointercancel',endDrag);
+ canvas.addEventListener('lostpointercapture',e=>{drag=null;stage.classList.remove('dragging')});
+
+ // Mouse wheel over a selected image also changes its scale.
+ canvas.addEventListener('wheel',e=>{
+  const p=point(e),it=hit(p.x,p.y);
+  if(!it)return;
+  e.preventDefault();select(it);
+  const next=Math.max(5,Math.min(400,Math.round(it.scale*100)+(e.deltaY<0?5:-5)));
+  it.scale=next/100;scale.value=next;scaleValue.textContent=next+'%';
+  draw(true);schedulePng();
+ },{passive:false});
+
+ updateControls();draw(true);
+}
+makeFreeEditor();
+
+$$('.tab').forEach(tab=>tab.onclick=()=>{
+ $$('.tab').forEach(t=>{const on=t===tab;t.classList.toggle('active',on);t.setAttribute('aria-selected',on)});
+ $$('.panel').forEach(p=>p.hidden=p.id!==`panel-${tab.dataset.tab}`);
+});
+})();
+</script>
+</body>
+</html>
